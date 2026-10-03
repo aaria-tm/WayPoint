@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WayPoint</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0f7ff', 100: '#e0effe', 500: '#0284c7', 600: '#0369a1', 700: '#075985', 900: '#0c2a4d' }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        #map { width: 100%; height: 100%; min-height: 380px; z-index: 10; }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 9999px; }
+    </style>
+</head>
+<body id="app-body" class="bg-slate-100 text-slate-800 transition-colors duration-200 min-h-screen flex flex-col font-sans select-none md:overflow-hidden md:h-screen">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between shadow-md z-30 shrink-0">
+        <div class="flex items-center gap-2.5">
+            <div class="bg-sky-600 p-2 rounded-lg"><i class="fa-solid fa-route text-base"></i></div>
+            <div>
+                <h1 class="text-base sm:text-lg font-bold tracking-tight leading-tight"> WayPoint </h1>
+                <p class="text-[10px] sm:text-xs text-slate-400">Inter-City Graph Routing & Highway Corridor System</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <span id="network-badge" class="hidden sm:flex items-center gap-1.5 text-xs bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="network-badge-text">Corridors Operational</span>
+            </span>
+            <div class="text-xs text-slate-300 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 font-mono">
+                <i class="fa-solid fa-clock mr-1 text-sky-400"></i><span id="current-clock">--:--</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-col-reverse md:flex-row flex-1 overflow-y-auto md:overflow-hidden relative">
+        <!-- Sidebar Navigation (Desktop vertical, Mobile bottom fixed bar) -->
+        <nav class="fixed bottom-0 left-0 right-0 h-14 md:static md:h-auto md:w-16 bg-slate-950 flex flex-row md:flex-col items-center justify-around md:justify-start py-1 md:py-5 gap-0 md:gap-6 z-40 border-t md:border-t-0 md:border-r border-slate-800 shrink-0">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" title="Route Dashboard" class="nav-btn p-2.5 md:p-3 rounded-xl bg-sky-600 text-white hover:bg-sky-500 transition flex flex-col md:flex-row items-center gap-1">
+                <i class="fa-solid fa-map-location-dot text-base md:text-lg"></i>
+                <span class="text-[9px] md:hidden">Map</span>
+            </button>
+            <button onclick="switchTab('stats')" id="nav-stats" title="Network Statistics" class="nav-btn p-2.5 md:p-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition flex flex-col md:flex-row items-center gap-1">
+                <i class="fa-solid fa-chart-pie text-base md:text-lg"></i>
+                <span class="text-[9px] md:hidden">Stats</span>
+            </button>
+            <button onclick="switchTab('settings')" id="nav-settings" title="System Settings" class="nav-btn p-2.5 md:p-3 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition flex flex-col md:flex-row items-center gap-1">
+                <i class="fa-solid fa-sliders text-base md:text-lg"></i>
+                <span class="text-[9px] md:hidden">Settings</span>
+            </button>
+        </nav>
+
+        <!-- PAGE 1: ROUTE DASHBOARD -->
+        <main id="page-dashboard" class="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden relative pb-16 md:pb-0">
+            <!-- Controls & Map Area -->
+            <div class="flex-1 flex flex-col min-h-[420px] lg:h-full overflow-hidden relative">
+                <!-- Trip Configuration Controls -->
+                <div class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 shadow-sm z-20 shrink-0">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-center">
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Origin City</label>
+                            <select id="start-city" class="w-full bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm border border-slate-300 dark:border-slate-700 rounded-lg p-2 dark:text-white focus:outline-none focus:border-sky-500 font-medium">
+                                <option value="Mumbai" selected>Mumbai</option>
+                                <option value="Pune">Pune</option>
+                                <option value="Delhi">Delhi</option>
+                                <option value="Jaipur">Jaipur</option>
+                                <option value="Bangalore">Bangalore</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Destination</label>
+                            <select id="end-city" class="w-full bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm border border-slate-300 dark:border-slate-700 rounded-lg p-2 dark:text-white focus:outline-none focus:border-sky-500 font-medium">
+                                <option value="Mumbai">Mumbai</option>
+                                <option value="Pune" selected>Pune</option>
+                                <option value="Delhi">Delhi</option>
+                                <option value="Jaipur">Jaipur</option>
+                                <option value="Bangalore">Bangalore</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Travel Date</label>
+                            <input type="date" id="start-date" onchange="calculateRoute()" class="w-full bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm border border-slate-300 dark:border-slate-700 rounded-lg p-2 dark:text-white focus:outline-none focus:border-sky-500 font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Start Time</label>
+                            <input type="time" id="start-time" value="15:55" onchange="calculateRoute()" class="w-full bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm border border-slate-300 dark:border-slate-700 rounded-lg p-2 dark:text-white focus:outline-none focus:border-sky-500 font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">Transport Mode</label>
+                            <div class="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-300 dark:border-slate-700">
+                                <button onclick="setMode('car')" id="mode-car" class="mode-btn flex-1 py-1 text-xs rounded bg-sky-600 text-white font-semibold transition"><i class="fa-solid fa-car"></i> Car</button>
+                                <button onclick="setMode('bus')" id="mode-bus" class="mode-btn flex-1 py-1 text-xs rounded text-slate-500 dark:text-slate-400 transition"><i class="fa-solid fa-bus"></i> Bus</button>
+                                <button onclick="setMode('train')" id="mode-train" class="mode-btn flex-1 py-1 text-xs rounded text-slate-500 dark:text-slate-400 transition"><i class="fa-solid fa-train"></i> Train</button>
+                            </div>
+                        </div>
+                        <div class="col-span-2 sm:col-span-1 flex items-end">
+                            <button onclick="calculateRoute()" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-semibold py-2 px-3 rounded-lg text-xs sm:text-sm transition shadow-sm flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-diamond-turn-right"></i> Find Route
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Amenities Bar for Car Mode -->
+                    <div id="amenities-filters" class="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-slate-500 dark:text-slate-400 font-bold text-[11px] uppercase mr-1">Filter Corridor Stations:</span>
+                            <button onclick="toggleAmenityFilter('petrol')" id="chip-petrol" class="filter-chip px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[11px] font-semibold">⛽ Petrol</button>
+                            <button onclick="toggleAmenityFilter('cng')" id="chip-cng" class="filter-chip px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300 dark:border-teal-800 text-[11px] font-semibold">🟢 CNG</button>
+                            <button onclick="toggleAmenityFilter('ev')" id="chip-ev" class="filter-chip px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800 text-[11px] font-semibold">⚡ EV Chargers</button>
+                        </div>
+                        <span id="amenity-total-badge" class="text-[11px] text-slate-400 hidden sm:inline">Active Corridor Pins</span>
+                    </div>
+                </div>
+
+                <!-- Leaflet Map Container -->
+                <div class="relative flex-1 min-h-[360px]">
+                    <div id="map"></div>
+                </div>
+            </div>
+
+            <!-- Right Detail Panel -->
+            <aside class="w-full lg:w-96 bg-white dark:bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col shrink-0 shadow-lg z-20">
+                <div class="p-3.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-bold text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
+                            <i class="fa-solid fa-signs-post text-sky-600"></i> Route Performance
+                        </h2>
+                        <span id="route-mode-badge" class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-bold bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">CAR</span>
+                    </div>
+
+                    <!-- Time & Cost Overview Cards -->
+                    <div class="grid grid-cols-2 gap-2 mt-2.5">
+                        <div class="bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <span class="text-[10px] font-bold text-slate-400 block uppercase">Estimated Duration</span>
+                            <span id="stat-est-time" class="text-base sm:text-lg font-bold text-sky-600 dark:text-sky-400">--</span>
+                        </div>
+                        <div class="bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <span class="text-[10px] font-bold text-slate-400 block uppercase" id="cost-card-label">Total Expense</span>
+                            <span id="stat-est-cost" class="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mumbai-Pune Highway Notice (Closed ONLY Till 10 Oct AND ONLY for Cars) -->
+                <div id="road-closed-alert" class="hidden m-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 shadow-sm">
+                    <div class="flex gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm mt-0.5 shrink-0"></i>
+                        <div>
+                            <strong class="font-bold text-amber-950 dark:text-amber-100 block">Mumbai-Pune Expressway Closed Till 10 Oct!</strong>
+                            <p class="mt-0.5 text-[11px] leading-relaxed">
+                                Yashwantrao Chavan Expressway is closed till <strong>10 October</strong> for ghat maintenance & repairs. <strong>You can go through the other route via Old NH-48 (Khopoli & Khandala Ghat).</strong>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scrollable Itinerary, Multi-Train Details & Amenities -->
+                <div class="p-3.5 space-y-4 max-h-[380px] lg:max-h-[calc(100vh-230px)] overflow-y-auto custom-scrollbar">
+                    <!-- Schedule Box: Direct or Multi-Train Transfer Cards -->
+                    <div id="transit-schedule-container" class="space-y-2 hidden">
+                        <!-- Injected dynamically with Leg 1, Transfer, Leg 2 cards -->
+                    </div>
+
+                    <!-- Petrol, CNG & EV Stops Along Selected Route (Car Only) -->
+                    <div id="amenities-container" class="space-y-2">
+                        <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                            <span>Corridor Fuel & Charging Points</span>
+                            <span id="amenities-count" class="text-[10px] text-sky-600 font-semibold">0 points</span>
+                        </h3>
+                        <div id="amenities-list" class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Step-by-Step Waypoint Layovers & Stops -->
+                    <div>
+                        <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2" id="timeline-header">Highway Waypoint Layovers</h3>
+                        <div id="itinerary-timeline" class="space-y-3 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
+                            <!-- Injected dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- PAGE 2: NETWORK STATISTICS -->
+        <main id="page-stats" class="hidden flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 dark:bg-slate-950 custom-scrollbar pb-20 md:pb-6">
+            <div class="max-w-5xl mx-auto space-y-5">
+                <div>
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Smart City Network Telemetry</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Live multi-city corridor health, transit fleet, and energy footprint.</p>
+                </div>
+
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div class="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">Active Hubs</span>
+                            <i class="fa-solid fa-city text-sky-500"></i>
+                        </div>
+                        <p class="text-lg sm:text-2xl font-bold text-slate-800 dark:text-white mt-1 sm:mt-2">5 Vertices</p>
+                        <p class="text-[11px] text-slate-500">Mumbai, Pune, Delhi, Jaipur, Blr</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">Multi-Hop Rail</span>
+                            <i class="fa-solid fa-train-subway text-emerald-500"></i>
+                        </div>
+                        <p class="text-lg sm:text-2xl font-bold text-slate-800 dark:text-white mt-1 sm:mt-2">Mumbai Transfer</p>
+                        <p class="text-[11px] text-emerald-600">Dynamic connected layovers</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">Bus Operators</span>
+                            <i class="fa-solid fa-bus text-amber-500"></i>
+                        </div>
+                        <p class="text-lg sm:text-2xl font-bold text-slate-800 dark:text-white mt-1 sm:mt-2">MSRTC / RSRTC</p>
+                        <p class="text-[11px] text-slate-500">State Roadway Networks</p>
+                    </div>
+                    <div class="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase">Refuel Hubs</span>
+                            <i class="fa-solid fa-gas-pump text-teal-500"></i>
+                        </div>
+                        <p class="text-lg sm:text-2xl font-bold text-slate-800 dark:text-white mt-1 sm:mt-2">22 Stations</p>
+                        <p class="text-[11px] text-teal-600">Petrol, CNG, and Fast EV Hubs</p>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto shadow-sm">
+                    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800">
+                        <h3 class="font-bold text-slate-800 dark:text-white text-xs sm:text-sm">National Corridors & Advisory Status</h3>
+                    </div>
+                    <table class="w-full text-xs text-left text-slate-600 dark:text-slate-300 min-w-[500px]">
+                        <thead class="bg-slate-50 dark:bg-slate-800/50 uppercase text-[10px] font-bold text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                            <tr>
+                                <th class="p-3">Corridor</th>
+                                <th class="p-3">Distance</th>
+                                <th class="p-3">Condition</th>
+                                <th class="p-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                            <tr>
+                                <td class="p-3 font-semibold text-slate-900 dark:text-white">Mumbai – Pune Expressway</td>
+                                <td class="p-3">148 km</td>
+                                <td class="p-3">6-lane Concrete</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800 font-bold">Closed Till 10 Oct</span></td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold text-slate-900 dark:text-white">Old Mumbai – Pune Highway (NH 48)</td>
+                                <td class="p-3">155 km</td>
+                                <td class="p-3">Ghat Section (Khopoli)</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-semibold">Active Detour</span></td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold text-slate-900 dark:text-white">Jaipur – Delhi Expressway (NE 4)</td>
+                                <td class="p-3">280 km</td>
+                                <td class="p-3">8-lane Access Controlled</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800">Normal</span></td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-semibold text-slate-900 dark:text-white">Mumbai – Bangalore (NH 48)</td>
+                                <td class="p-3">985 km</td>
+                                <td class="p-3">4-lane Asphalt</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800">Clear</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- PAGE 3: SETTINGS -->
+        <main id="page-settings" class="hidden flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 dark:bg-slate-950 custom-scrollbar pb-20 md:pb-6">
+            <div class="max-w-2xl mx-auto bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+                <h2 class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-slate-800 pb-3">User & Display Preferences</h2>
+
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="font-semibold text-sm text-slate-800 dark:text-white">Dark Theme Navigation</h4>
+                            <p class="text-xs text-slate-500">Dark aesthetic for low-light night driving</p>
+                        </div>
+                        <button onclick="toggleDarkMode()" id="dark-mode-btn" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200">
+                            Toggle Dark
+                        </button>
+                    </div>
+
+                    <div class="border-t border-slate-100 dark:border-slate-800 pt-3">
+                        <label class="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-white mb-1">Typography Family</label>
+                        <select onchange="changeFontFamily(this.value)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs rounded-lg p-2 dark:text-white font-medium">
+                            <option value="font-sans">Modern Sans-Serif</option>
+                            <option value="font-serif">Classic Serif</option>
+                            <option value="font-mono">Technical Monospace</option>
+                        </select>
+                    </div>
+
+                    <div class="border-t border-slate-100 dark:border-slate-800 pt-3">
+                        <label class="block text-xs sm:text-sm font-semibold text-slate-800 dark:text-white mb-1">Base Font Scaling</label>
+                        <div class="flex gap-2">
+                            <button onclick="setFontSize('text-xs')" class="flex-1 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-sky-50 dark:hover:bg-slate-700 font-medium">Compact (12px)</button>
+                            <button onclick="setFontSize('text-sm')" class="flex-1 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium shadow-sm">Default (14px)</button>
+                            <button onclick="setFontSize('text-base')" class="flex-1 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-sky-50 dark:hover:bg-slate-700 font-medium">Large (16px)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-16 md:bottom-6 right-4 md:right-6 z-50 transform translate-y-32 transition-transform duration-300 ease-out bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-3 max-w-sm">
+        <div class="text-amber-400 text-base shrink-0"><i class="fa-solid fa-circle-exclamation"></i></div>
+        <div>
+            <p class="text-xs font-bold" id="toast-title">Notice</p>
+            <p class="text-[11px] text-slate-300 leading-snug" id="toast-body">Message</p>
+        </div>
+    </div>
+
+    <script>
+        // -------------------------------------------------------------
+        // GRAPH NODES & GEOGRAPHIC DATA
+        // -------------------------------------------------------------
+        const cities = {
+            'Mumbai':    { coords: [19.0760, 72.8777] },
+            'Pune':      { coords: [18.5204, 73.8567] },
+            'Delhi':     { coords: [28.6139, 77.2090] },
+            'Jaipur':    { coords: [26.9124, 75.7873] },
+            'Bangalore': { coords: [12.9716, 77.5946] }
+        };
+
+        // Highway corridors for cars with detailed waypoints
+        const carRouteCorridors = {
+            'Mumbai-Pune-Exp': {
+                dist: 148, toll: 320,
+                waypoints: ['Mumbai Hub', 'Navi Mumbai Toll', 'Panvel Junction', 'Khalapur Food Oasis', 'Lonavala Viaduct', 'Talegaon Toll Plaza', 'Pune City'],
+                path: [
+                    [19.0760, 72.8777], [19.0330, 73.0297], [18.9894, 73.1175],
+                    [18.7845, 73.2847], [18.7557, 73.4091], [18.7298, 73.6749], [18.5204, 73.8567]
+                ]
+            },
+            'Mumbai-Pune-Old': {
+                dist: 155, toll: 0,
+                waypoints: ['Mumbai Hub', 'Sion-Panvel Highway', 'Chowk Phata', 'Khopoli Old NH-48', 'Khandala Ghat Curves', 'Lonavala Market', 'Kamshet', 'Dehu Road', 'Pune City'],
+                path: [
+                    [19.0760, 72.8777], [19.0200, 73.0100], [18.8890, 73.2200],
+                    [18.7850, 73.3400], [18.7610, 73.3850], [18.7450, 73.4200],
+                    [18.6900, 73.5400], [18.6300, 73.8000], [18.5204, 73.8567]
+                ]
+            },
+            'Delhi-Jaipur': {
+                dist: 280, toll: 460,
+                waypoints: ['Delhi Dhaula Kuan', 'Gurugram Cyber City', 'Manesar Kherki Toll', 'Neemrana Oasis Hub', 'Kotputli Layover', 'Shahpura Toll', 'Jaipur Amer Road'],
+                path: [
+                    [28.6139, 77.2090], [28.4595, 77.0266], [28.3540, 76.9400],
+                    [27.9880, 76.3880], [27.7050, 76.2020], [27.3910, 75.9610], [26.9124, 75.7873]
+                ]
+            },
+            'Mumbai-Delhi': {
+                dist: 1420, toll: 1850,
+                waypoints: ['Mumbai Fountain', 'Ghodbunder Road', 'Surat Ring Road', 'Vadodara Golden Bridge', 'Ratlam Expressway Link', 'Kota Chambal Bridge', 'Mathura Bypass', 'Delhi Ashram'],
+                path: [
+                    [19.0760, 72.8777], [19.2700, 72.9300], [21.1702, 72.8311],
+                    [22.3072, 73.1812], [23.3315, 75.0367], [25.2138, 75.8648],
+                    [27.4924, 77.6737], [28.6139, 77.2090]
+                ]
+            },
+            'Pune-Bangalore': {
+                dist: 840, toll: 1120,
+                waypoints: ['Pune Katraj Tunnel', 'Shirwal Rest Plaza', 'Satara Khambatki Ghat', 'Karad Junction', 'Kolhapur Shiroli Toll', 'Belagavi Bypass', 'Hubballi Bypass', 'Davanagere Byadgi', 'Tumakuru Toll', 'Bangalore Peenya'],
+                path: [
+                    [18.5204, 73.8567], [18.1500, 73.9800], [17.6805, 74.0183],
+                    [17.2885, 74.1844], [16.7050, 74.2433], [15.8497, 74.4977],
+                    [15.3647, 75.1240], [14.4644, 75.9218], [13.3409, 77.1006], [12.9716, 77.5946]
+                ]
+            },
+            'Mumbai-Bangalore': {
+                dist: 985, toll: 1350,
+                waypoints: ['Mumbai Terminal', 'Navi Mumbai', 'Pune Outer Bypass', 'Satara Bypass', 'Kolhapur Oasis', 'Belagavi Border', 'Hubballi Hub', 'Davanagere', 'Tumakuru', 'Bangalore Yeshwantpur'],
+                path: [
+                    [19.0760, 72.8777], [19.0330, 73.0297], [18.5204, 73.8567],
+                    [17.6805, 74.0183], [16.7050, 74.2433], [15.8497, 74.4977],
+                    [15.3647, 75.1240], [14.4644, 75.9218], [13.3409, 77.1006], [12.9716, 77.5946]
+                ]
+            },
+            'Jaipur-Mumbai': {
+                dist: 1150, toll: 1400,
+                waypoints: ['Jaipur Station', 'Kishangarh Toll', 'Bhilwara Bypass', 'Udaipur Chirwa Ghat', 'Ahmedabad Ring', 'Vadodara Expressway', 'Surat Bypass', 'Vapi Border', 'Mumbai Dahisar'],
+                path: [
+                    [26.9124, 75.7873], [26.5700, 74.8600], [25.3500, 74.6300],
+                    [24.5854, 73.7125], [23.0225, 72.5714], [22.3072, 73.1812],
+                    [21.1702, 72.8311], [20.3700, 72.9100], [19.0760, 72.8777]
+                ]
+            }
+        };
+
+        // -------------------------------------------------------------
+        // TRANSIT REPOSITORY: DIRECT & MULTI-TRAIN TRANSFERS
+        // -------------------------------------------------------------
+        const directTransitRoutes = {
+            'Mumbai-Pune': {
+                train: { name: 'Deccan Queen Superfast Express (12124)', operator: 'Central Railway', cost: 195, durationMin: 190 },
+                bus:   { name: 'MSRTC Shivneri Volvo AC (E-Bus)', operator: 'Maharashtra State Roadways', cost: 480, durationMin: 230 }
+            },
+            'Delhi-Jaipur': {
+                train: { name: 'Ajmer Shatabdi Express (12015)', operator: 'Northern Railway', cost: 680, durationMin: 270 },
+                bus:   { name: 'RSRTC Goldline Super Deluxe AC', operator: 'Rajasthan State Road Transport', cost: 420, durationMin: 320 }
+            },
+            'Mumbai-Delhi': {
+                train: { name: 'August Kranti Tejas Rajdhani (12954)', operator: 'Western Railway', cost: 2450, durationMin: 960 },
+                bus:   { name: 'IntrCity SmartBus Multi-Axle Sleeper', operator: 'IntrCity Mobility', cost: 1650, durationMin: 1320 }
+            },
+            'Pune-Bangalore': {
+                train: { name: 'KSR Bengaluru Intercity Express (11014)', operator: 'South Western Railway', cost: 1250, durationMin: 1020 },
+                bus:   { name: 'KSRTC Ambaari Dream Class Volvo', operator: 'Karnataka State Road Transport', cost: 1100, durationMin: 900 }
+            },
+            'Mumbai-Bangalore': {
+                train: { name: 'Udyan Superfast Express (11302)', operator: 'Central Railway', cost: 1450, durationMin: 1440 },
+                bus:   { name: 'KSRTC Airavat Club Class Multi-Axle', operator: 'Karnataka State Road Transport', cost: 1350, durationMin: 1080 }
+            },
+            'Jaipur-Mumbai': {
+                train: { name: 'Jaipur - Mumbai Central SF Express (12956)', operator: 'Western Railway', cost: 1720, durationMin: 1040 },
+                bus:   { name: 'Shrinath Travels Multi-Axle Volvo AC', operator: 'Shrinath Transcon', cost: 1400, durationMin: 1260 }
+            }
+        };
+
+        // Multi-Leg Train Journeys (Switching via Mumbai Central / CSMT Hub)
+        const multiTrainRoutes = {
+            'Bangalore-Jaipur': {
+                transferCity: 'Mumbai',
+                transferStation: 'Mumbai Central (MMCT) / CSMT',
+                layoverMin: 165, // 2h 45m
+                leg1: { from: 'Bangalore (SBC)', to: 'Mumbai (CSMT)', name: 'Udyan Superfast Express (11302)', operator: 'Central Railway', cost: 1450, durationMin: 1440 },
+                leg2: { from: 'Mumbai (MMCT)', to: 'Jaipur (JP)', name: 'Jaipur Superfast Express (12956)', operator: 'Western Railway', cost: 1720, durationMin: 1040 }
+            },
+            'Jaipur-Bangalore': {
+                transferCity: 'Mumbai',
+                transferStation: 'Mumbai Central (MMCT) / CSMT',
+                layoverMin: 150, // 2h 30m
+                leg1: { from: 'Jaipur (JP)', to: 'Mumbai (MMCT)', name: 'Mumbai Central SF Express (12955)', operator: 'Western Railway', cost: 1720, durationMin: 1040 },
+                leg2: { from: 'Mumbai (CSMT)', to: 'Bangalore (SBC)', name: 'Udyan Express (11301)', operator: 'Central Railway', cost: 1450, durationMin: 1440 }
+            },
+            'Bangalore-Delhi': {
+                transferCity: 'Mumbai',
+                transferStation: 'Mumbai Central (MMCT)',
+                layoverMin: 180, // 3h 00m
+                leg1: { from: 'Bangalore (SBC)', to: 'Mumbai (CSMT)', name: 'Udyan Superfast Express (11302)', operator: 'Central Railway', cost: 1450, durationMin: 1440 },
+                leg2: { from: 'Mumbai (MMCT)', to: 'Delhi (NDLS)', name: 'August Kranti Tejas Rajdhani (12953)', operator: 'Western Railway', cost: 2450, durationMin: 960 }
+            },
+            'Delhi-Bangalore': {
+                transferCity: 'Mumbai',
+                transferStation: 'Mumbai Central (MMCT)',
+                layoverMin: 195, // 3h 15m
+                leg1: { from: 'Delhi (NDLS)', to: 'Mumbai (MMCT)', name: 'August Kranti Tejas Rajdhani (12954)', operator: 'Western Railway', cost: 2450, durationMin: 960 },
+                leg2: { from: 'Mumbai (CSMT)', to: 'Bangalore (SBC)', name: 'Udyan Express (11301)', operator: 'Central Railway', cost: 1450, durationMin: 1440 }
+            },
+            'Pune-Delhi': {
+                transferCity: 'Mumbai',
+                transferStation: 'Mumbai CSMT / MMCT Hub',
+                layoverMin: 120, // 2h 00m
+                leg1: { from: 'Pune (PUNE)', to: 'Mumbai (CSMT)', name: 'Deccan Queen Superfast (12124)', operator: 'Central Railway', cost: 195, durationMin: 190 },
+                leg2: { from: 'Mumbai (MMCT)', to: 'Delhi (NDLS)', name: 'August Kranti Tejas Rajdhani (12953)', operator: 'Western Railway', cost: 2450, durationMin: 960 }
+            },
+            'Pune-Jaipur': {
+                transferCity: 'Mumbai',
+                transferStation: 'Mumbai Central (MMCT)',
+                layoverMin: 140, // 2h 20m
+                leg1: { from: 'Pune (PUNE)', to: 'Mumbai (CSMT)', name: 'Pragati Superfast Express (12126)', operator: 'Central Railway', cost: 195, durationMin: 195 },
+                leg2: { from: 'Mumbai (MMCT)', to: 'Jaipur (JP)', name: 'Jaipur Superfast Express (12956)', operator: 'Western Railway', cost: 1720, durationMin: 1040 }
+            }
+        };
+
+        // Fuel & EV Stations along all cities & corridors
+        const allAmenities = [
+            { city: 'Mumbai', type: 'petrol', name: 'HPCL Auto Care Centre', loc: 'BKC, Bandra East', coords: [19.0650, 72.8680] },
+            { city: 'Mumbai', type: 'cng',    name: 'MGL CNG Station', loc: 'Sion-Trombay Road', coords: [19.0430, 72.8830] },
+            { city: 'Mumbai', type: 'ev',     name: 'Tata Power 60kW DC Charger', loc: 'Bandra Kurla Complex', coords: [19.0680, 72.8690] },
+
+            { city: 'Mumbai-Pune', type: 'petrol', name: 'BPCL Fuel Oasis', loc: 'Khopoli Bypass (Old NH-48)', coords: [18.7820, 73.3420] },
+            { city: 'Mumbai-Pune', type: 'cng',    name: 'MGL Mother CNG Station', loc: 'Panvel Chowk', coords: [18.9950, 73.1200] },
+            { city: 'Mumbai-Pune', type: 'ev',     name: 'Jio-bp Pulse 120kW Supercharger', loc: 'Khandala Ghat Rest Stop', coords: [18.7560, 73.3980] },
+
+            { city: 'Pune', type: 'petrol', name: 'Shell Fuel Station', loc: 'Baner Main Road', coords: [18.5590, 73.7860] },
+            { city: 'Pune', type: 'cng',    name: 'MNGL Green CNG Station', loc: 'Shivajinagar, Pune', coords: [18.5310, 73.8440] },
+            { city: 'Pune', type: 'ev',     name: 'Kazam DC Fast Charger', loc: 'Koregaon Park', coords: [18.5360, 73.8930] },
+
+            { city: 'Delhi', type: 'petrol', name: 'Indian Oil Flagship Station', loc: 'Connaught Place Ring', coords: [28.6310, 77.2190] },
+            { city: 'Delhi', type: 'cng',    name: 'IGL Mega CNG Station', loc: 'Dhaula Kuan NH-48', coords: [28.5920, 77.1610] },
+            { city: 'Delhi', type: 'ev',     name: 'Tata Power EV Supercharger', loc: 'Aerocity Hospitality Hub', coords: [28.5530, 77.1210] },
+
+            { city: 'Jaipur', type: 'petrol', name: 'HPCL Heritage Station', loc: 'MI Road, Jaipur', coords: [26.9180, 75.8010] },
+            { city: 'Jaipur', type: 'cng',    name: 'Torrent Gas CNG Hub', loc: 'Mansarovar Metro Stop', coords: [26.8660, 75.7680] },
+            { city: 'Jaipur', type: 'ev',     name: 'Statiq 60kW DC EV Charger', loc: 'Malviya Nagar', coords: [26.8530, 75.8150] },
+
+            { city: 'Bangalore', type: 'petrol', name: 'BPCL Auto Station', loc: '100ft Road, Indiranagar', coords: [12.9780, 77.6400] },
+            { city: 'Bangalore', type: 'cng',    name: 'GAIL Gas CNG Station', loc: 'Electronic City Phase 1', coords: [12.8450, 77.6630] },
+            { city: 'Bangalore', type: 'ev',     name: 'Ather Grid & Jio-bp EV Hub', loc: 'Koramangala 5th Block', coords: [12.9350, 77.6200] }
+        ];
+
+        // -------------------------------------------------------------
+        // APPLICATION STATE
+        // -------------------------------------------------------------
+        let currentMode = 'car';
+        let activeAmenityFilters = { petrol: true, cng: true, ev: true };
+        let map, routePolylineGroup, amenityMarkersGroup;
+
+        // -------------------------------------------------------------
+        // INITIALIZATION
+        // -------------------------------------------------------------
+        function initApp() {
+            // Default date set to today (Oct 3, 2026 - will trigger closure notice)
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            document.getElementById('start-date').value = `${yyyy}-${mm}-${dd}`;
+
+            initMap();
+        }
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            const mapboxKey = 'pk.eyJ1IjoiYWFyaWExNyIsImEiOiJjbXVzOXlmYTAwaWRyMnhzZHV6YnV6a2dlIn0.mxhucW1426UVjkZYdQWs0Q';
+
+            L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=' + mapboxKey, {
+                maxZoom: 19,
+                attribution: '© Mapbox | Smart City Routing',
+                id: 'mapbox/streets-v12',
+                tileSize: 512,
+                zoomOffset: -1
+            }).addTo(map);
+
+            routePolylineGroup = L.layerGroup().addTo(map);
+            amenityMarkersGroup = L.layerGroup().addTo(map);
+
+            // City hub markers
+            Object.keys(cities).forEach(cityName => {
+                const c = cities[cityName];
+                const marker = L.circleMarker(c.coords, {
+                    radius: 7,
+                    fillColor: '#0284c7',
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.95
+                }).addTo(map);
+                marker.bindPopup(`<strong>${cityName} Hub</strong>`);
+            });
+
+            calculateRoute();
+        }
+
+        // -------------------------------------------------------------
+        // TABS & MODE SELECTION
+        // -------------------------------------------------------------
+        function switchTab(tabId) {
+            ['dashboard', 'stats', 'settings'].forEach(t => {
+                document.getElementById(`page-${t}`).classList.add('hidden');
+                document.getElementById(`nav-${t}`).classList.remove('bg-sky-600', 'text-white');
+                document.getElementById(`nav-${t}`).classList.add('text-slate-400');
+            });
+
+            document.getElementById(`page-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.add('bg-sky-600', 'text-white');
+            activeBtn.classList.remove('text-slate-400');
+
+            if (tabId === 'dashboard') {
+                setTimeout(() => { map.invalidateSize(); }, 200);
+            }
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            ['car', 'bus', 'train'].forEach(m => {
+                const btn = document.getElementById(`mode-${m}`);
+                if (m === mode) {
+                    btn.classList.add('bg-sky-600', 'text-white');
+                    btn.classList.remove('text-slate-500', 'dark:text-slate-400');
+                } else {
+                    btn.classList.remove('bg-sky-600', 'text-white');
+                    btn.classList.add('text-slate-500', 'dark:text-slate-400');
+                }
+            });
+
+            document.getElementById('route-mode-badge').innerText = mode.toUpperCase();
+            
+            const amenitiesBar = document.getElementById('amenities-filters');
+            const amenitiesContainer = document.getElementById('amenities-container');
+            const timelineHeader = document.getElementById('timeline-header');
+
+            if (mode === 'car') {
+                amenitiesBar.classList.remove('hidden');
+                amenitiesContainer.classList.remove('hidden');
+                timelineHeader.innerText = "Highway Waypoint Layovers";
+            } else {
+                amenitiesBar.classList.add('hidden');
+                amenitiesContainer.classList.add('hidden');
+                timelineHeader.innerText = "Transit Stations & Layovers";
+            }
+
+            calculateRoute();
+        }
+
+        // -------------------------------------------------------------
+        // DATE VERIFICATION: OCTOBER 10 CUTOFF LOGIC
+        // -------------------------------------------------------------
+        function isHighwayClosedOnDate(selectedDateStr) {
+            if (!selectedDateStr) return true;
+            const parts = selectedDateStr.split('-').map(Number); // YYYY, MM, DD
+            const month = parts[1]; // 1-based (10 = October)
+            const day = parts[2];
+
+            // Closed on or before 10th October
+            if (month < 10) return true;
+            if (month === 10 && day <= 10) return true;
+            return false; // After October 10: Expressway is open
+        }
+
+        // -------------------------------------------------------------
+        // MAIN ROUTING ORCHESTRATOR
+        // -------------------------------------------------------------
+        function calculateRoute() {
+            const start = document.getElementById('start-city').value;
+            const end = document.getElementById('end-city').value;
+            const travelDate = document.getElementById('start-date').value;
+            const departureTime = document.getElementById('start-time').value || "15:55";
+
+            if (start === end) {
+                showToast("Identical Locations", `You are already in ${start}! Please choose a different destination.`);
+                return;
+            }
+
+            routePolylineGroup.clearLayers();
+            amenityMarkersGroup.clearLayers();
+
+            const isMumbaiPune = (start === 'Mumbai' && end === 'Pune') || (start === 'Pune' && end === 'Mumbai');
+            const roadClosedAlert = document.getElementById('road-closed-alert');
+            const netBadgeText = document.getElementById('network-badge-text');
+
+            const isClosed = isHighwayClosedOnDate(travelDate);
+
+            // Expressway closure banner shows ONLY for Mumbai - Pune when mode is CAR
+            if (isMumbaiPune && currentMode === 'car') {
+                if (isClosed) {
+                    roadClosedAlert.classList.remove('hidden');
+                    netBadgeText.innerText = 'Expressway Maintenance';
+                } else {
+                    roadClosedAlert.classList.add('hidden');
+                    netBadgeText.innerText = 'Expressway Reopened';
+                }
+            } else {
+                roadClosedAlert.classList.add('hidden');
+                netBadgeText.innerText = 'Corridors Operational';
+            }
+
+            if (currentMode === 'train') {
+                processTrainRouting(start, end, departureTime);
+            } else if (currentMode === 'bus') {
+                processBusRouting(start, end, departureTime, isClosed);
+            } else {
+                processCarRouting(start, end, departureTime, isClosed);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // CAR ROUTING WITH FULL WAYPOINT LAYOVERS
+        // -------------------------------------------------------------
+        function processCarRouting(start, end, depTime, isClosed) {
+            document.getElementById('transit-schedule-container').classList.add('hidden');
+            document.getElementById('cost-card-label').innerText = "Total Fuel & Toll";
+
+            let corridorKey = `${start}-${end}`;
+            let corridorKeyRev = `${end}-${start}`;
+
+            let corridorData = null;
+            let isReversed = false;
+
+            if (start === 'Mumbai' && end === 'Pune' || start === 'Pune' && end === 'Mumbai') {
+                corridorData = isClosed ? carRouteCorridors['Mumbai-Pune-Old'] : carRouteCorridors['Mumbai-Pune-Exp'];
+                if (start === 'Pune') isReversed = true;
+            } else if (carRouteCorridors[corridorKey]) {
+                corridorData = carRouteCorridors[corridorKey];
+            } else if (carRouteCorridors[corridorKeyRev]) {
+                corridorData = carRouteCorridors[corridorKeyRev];
+                isReversed = true;
+            } else {
+                // Approximate corridor connecting via Mumbai
+                corridorData = {
+                    dist: 1200, toll: 1600,
+                    waypoints: [`${start} Main Toll`, `${start} Expressway Link`, 'Interstate Corridor', 'State Border Plaza', `${end} Highway Bypass`, `${end} Terminal`],
+                    path: [cities[start].coords, cities['Mumbai'].coords, cities[end].coords]
+                };
+            }
+
+            let pathCoords = [...corridorData.path];
+            let waypoints = [...corridorData.waypoints];
+
+            if (isReversed) {
+                pathCoords.reverse();
+                waypoints.reverse();
+            }
+
+            // Draw road polyline
+            const polyline = L.polyline(pathCoords, {
+                color: (start === 'Mumbai' && end === 'Pune' && isClosed) ? '#f59e0b' : '#0284c7',
+                weight: 5,
+                opacity: 0.9,
+                dashArray: (start === 'Mumbai' && end === 'Pune' && isClosed) ? '7, 8' : null
+            }).addTo(routePolylineGroup);
+
+            map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+
+            // Calculate drive time & expense
+            const speed = 70;
+            const durationMin = Math.round((corridorData.dist / speed) * 60);
+            const fuelCost = Math.round((corridorData.dist / 13) * 105);
+            const totalExpense = fuelCost + corridorData.toll;
+
+            document.getElementById('stat-est-time').innerText = `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`;
+            document.getElementById('stat-est-cost').innerText = `₹${totalExpense.toLocaleString('en-IN')}`;
+
+            renderTimelineSteps(waypoints, durationMin, 'car');
+            plotRelevantAmenities([start, end, 'Mumbai-Pune']);
+        }
+
+        // -------------------------------------------------------------
+        // TRAIN ROUTING (Direct or Multi-Train Transfer via Mumbai)
+        // -------------------------------------------------------------
+        function processTrainRouting(start, end, depTime) {
+            const transitContainer = document.getElementById('transit-schedule-container');
+            transitContainer.innerHTML = '';
+            transitContainer.classList.remove('hidden');
+            document.getElementById('cost-card-label').innerText = "Total Train Fares";
+
+            const directKey = `${start}-${end}`;
+            const directKeyRev = `${end}-${start}`;
+            const multiKey = `${start}-${end}`;
+
+            const [hours, mins] = depTime.split(':').map(Number);
+            const baseDate = new Date();
+            baseDate.setHours(hours, mins, 0);
+
+            // Case A: Multi-Train Switch / Layover Required (e.g. Bangalore to Jaipur/Delhi)
+            if (multiTrainRoutes[multiKey]) {
+                const multi = multiTrainRoutes[multiKey];
+                const leg1 = multi.leg1;
+                const leg2 = multi.leg2;
+
+                // Timings
+                const dep1 = new Date(baseDate.getTime() + 180 * 60000); // 3h after search
+                const arr1 = new Date(dep1.getTime() + leg1.durationMin * 60000);
+
+                const dep2 = new Date(arr1.getTime() + multi.layoverMin * 60000);
+                const arr2 = new Date(dep2.getTime() + leg2.durationMin * 60000);
+
+                const totalDurationMin = Math.round((arr2 - dep1) / 60000);
+                const totalRailCost = leg1.cost + leg2.cost;
+
+                // Update Top Stats
+                document.getElementById('stat-est-time').innerText = `${Math.floor(totalDurationMin / 60)}h ${totalDurationMin % 60}m`;
+                document.getElementById('stat-est-cost').innerText = `₹${totalRailCost.toLocaleString('en-IN')}`;
+
+                const formatTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                // Multi-Leg HTML Output
+                transitContainer.innerHTML = `
+                    <!-- Leg 1 Card -->
+                    <div class="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <div class="flex items-center justify-between text-xs mb-1">
+                            <span class="font-bold text-slate-800 dark:text-white"><i class="fa-solid fa-train text-sky-500 mr-1"></i> ${leg1.name}</span>
+                            <span class="px-2 py-0.5 bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300 rounded font-bold text-[10px]">Leg 1</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400">${leg1.from} ➔ ${leg1.to}</div>
+                        <div class="text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between mt-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                            <span>Dep: <strong class="text-slate-900 dark:text-white">${formatTime(dep1)}</strong></span>
+                            <span>Arr: <strong class="text-slate-900 dark:text-white">${formatTime(arr1)}</strong></span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-400">Fare: ₹${leg1.cost}</span>
+                        </div>
+                    </div>
+
+                    <!-- Station Switch / Layover Banner -->
+                    <div class="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-dashed border-amber-300 dark:border-amber-700 rounded-xl text-center">
+                        <div class="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-arrows-split-up-and-left"></i>
+                            <span>Switch Train at ${multi.transferStation}</span>
+                        </div>
+                        <p class="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">Transfer Layover Duration: <strong>${Math.floor(multi.layoverMin/60)}h ${multi.layoverMin%60}m</strong></p>
+                    </div>
+
+                    <!-- Leg 2 Card -->
+                    <div class="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <div class="flex items-center justify-between text-xs mb-1">
+                            <span class="font-bold text-slate-800 dark:text-white"><i class="fa-solid fa-train text-sky-500 mr-1"></i> ${leg2.name}</span>
+                            <span class="px-2 py-0.5 bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300 rounded font-bold text-[10px]">Leg 2</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400">${leg2.from} ➔ ${leg2.to}</div>
+                        <div class="text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between mt-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                            <span>Dep: <strong class="text-slate-900 dark:text-white">${formatTime(dep2)}</strong></span>
+                            <span>Arr: <strong class="text-slate-900 dark:text-white">${formatTime(arr2)}</strong></span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-400">Fare: ₹${leg2.cost}</span>
+                        </div>
+                    </div>
+
+                    <!-- IRCTC Booking CTA -->
+                    <a href="https://www.irctc.co.in/nget/train-search" target="_blank" class="w-full py-2 rounded-lg text-xs font-bold text-center block bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition">
+                        <i class="fa-solid fa-ticket mr-1"></i> Book Connected Trains on IRCTC
+                    </a>
+                `;
+
+                // Draw connecting path on map
+                const pathCoords = [cities[start].coords, cities[multi.transferCity].coords, cities[end].coords];
+                const polyline = L.polyline(pathCoords, { color: '#0284c7', weight: 4, opacity: 0.85 }).addTo(routePolylineGroup);
+                map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+
+                // Render Timeline Steps
+                renderTimelineSteps([
+                    `${start} Railway Terminal (Board Leg 1)`,
+                    `${multi.transferStation} Arrival`,
+                    `Layover & Platform Switch (${Math.floor(multi.layoverMin/60)}h ${multi.layoverMin%60}m)`,
+                    `Board ${leg2.name}`,
+                    `${end} Junction (Final Arrival)`
+                ], totalDurationMin, 'train');
+
+            } else {
+                // Case B: Direct Train Route
+                const info = (directTransitRoutes[directKey] || directTransitRoutes[directKeyRev] || {
+                    train: { name: `Superfast Express (${start} - ${end})`, operator: 'Indian Railways', cost: 1150, durationMin: 720 }
+                }).train;
+
+                const dep = new Date(baseDate.getTime() + 260 * 60000);
+                const arr = new Date(dep.getTime() + info.durationMin * 60000);
+
+                document.getElementById('stat-est-time').innerText = `${Math.floor(info.durationMin / 60)}h ${info.durationMin % 60}m`;
+                document.getElementById('stat-est-cost').innerText = `₹${info.cost.toLocaleString('en-IN')}`;
+
+                const formatTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                transitContainer.innerHTML = `
+                    <div class="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <div class="flex items-center justify-between text-xs mb-1">
+                            <span class="font-bold text-slate-800 dark:text-white"><i class="fa-solid fa-train text-sky-500 mr-1"></i> ${info.name}</span>
+                            <span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 rounded font-bold text-[10px]">Direct Service</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400">${info.operator}</div>
+                        <div class="text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between mt-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                            <span>Dep: <strong class="text-slate-900 dark:text-white">${formatTime(dep)}</strong></span>
+                            <span>Arr: <strong class="text-slate-900 dark:text-white">${formatTime(arr)}</strong></span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-400">Fare: ₹${info.cost}</span>
+                        </div>
+                    </div>
+                    <a href="https://www.irctc.co.in/nget/train-search" target="_blank" class="w-full py-2 rounded-lg text-xs font-bold text-center block bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition">
+                        <i class="fa-solid fa-ticket mr-1"></i> Book Direct Ticket on IRCTC
+                    </a>
+                `;
+
+                const pathCoords = [cities[start].coords, cities[end].coords];
+                const polyline = L.polyline(pathCoords, { color: '#0284c7', weight: 4, opacity: 0.85 }).addTo(routePolylineGroup);
+                map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+
+                renderTimelineSteps([
+                    `${start} Railway Terminal`,
+                    'Main Regional Junction',
+                    'Interstate Corridor Link',
+                    `${end} Railway Station`
+                ], info.durationMin, 'train');
+            }
+        }
+
+        // -------------------------------------------------------------
+        // BUS ROUTING (RedBus Integration)
+        // -------------------------------------------------------------
+        function processBusRouting(start, end, depTime, isClosed) {
+            const transitContainer = document.getElementById('transit-schedule-container');
+            transitContainer.innerHTML = '';
+            transitContainer.classList.remove('hidden');
+            document.getElementById('cost-card-label').innerText = "Bus Ticket Fare";
+
+            const directKey = `${start}-${end}`;
+            const directKeyRev = `${end}-${start}`;
+
+            const info = (directTransitRoutes[directKey] || directTransitRoutes[directKeyRev] || {
+                bus: { name: `Intercity Multi-Axle Volvo AC`, operator: 'State Transport Corporation', cost: 950, durationMin: 680 }
+            }).bus;
+
+            const [hours, mins] = depTime.split(':').map(Number);
+            const baseDate = new Date();
+            baseDate.setHours(hours, mins, 0);
+
+            const dep = new Date(baseDate.getTime() + 240 * 60000);
+            const arr = new Date(dep.getTime() + info.durationMin * 60000);
+
+            document.getElementById('stat-est-time').innerText = `${Math.floor(info.durationMin / 60)}h ${info.durationMin % 60}m`;
+            document.getElementById('stat-est-cost').innerText = `₹${info.cost.toLocaleString('en-IN')}`;
+
+            const formatTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            transitContainer.innerHTML = `
+                <div class="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center justify-between text-xs mb-1">
+                        <span class="font-bold text-slate-800 dark:text-white"><i class="fa-solid fa-bus text-amber-500 mr-1"></i> ${info.name}</span>
+                        <span class="px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 rounded font-bold text-[10px]">Bus Service</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 dark:text-slate-400">${info.operator}</div>
+                    <div class="text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between mt-2 pt-1 border-t border-slate-200 dark:border-slate-700">
+                        <span>Dep: <strong class="text-slate-900 dark:text-white">${formatTime(dep)}</strong></span>
+                        <span>Arr: <strong class="text-slate-900 dark:text-white">${formatTime(arr)}</strong></span>
+                        <span class="font-bold text-emerald-600 dark:text-emerald-400">Fare: ₹${info.cost}</span>
+                    </div>
+                </div>
+                <a href="https://www.redbus.in/bus-tickets/${start.toLowerCase()}-to-${end.toLowerCase()}" target="_blank" class="w-full py-2 rounded-lg text-xs font-bold text-center block bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition">
+                    <i class="fa-solid fa-bus mr-1"></i> Reserve Seats on RedBus
+                </a>
+            `;
+
+            let pathCoords = [cities[start].coords, cities[end].coords];
+            if (start === 'Mumbai' && end === 'Pune' || start === 'Pune' && end === 'Mumbai') {
+                pathCoords = isClosed ? carRouteCorridors['Mumbai-Pune-Old'].path : carRouteCorridors['Mumbai-Pune-Exp'].path;
+            }
+
+            const polyline = L.polyline(pathCoords, { color: '#f59e0b', weight: 4, opacity: 0.85 }).addTo(routePolylineGroup);
+            map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+
+            renderTimelineSteps([
+                `${start} Inter-State Bus Terminal (ISBT)`,
+                'Highway Highway Food Oasis Layover',
+                'Toll Plaza Checkpost',
+                `${end} Central Bus Stand`
+            ], info.durationMin, 'bus');
+        }
+
+        // -------------------------------------------------------------
+        // AMENITIES PLOTTER (Petrol, CNG, EV)
+        // -------------------------------------------------------------
+        function plotRelevantAmenities(relevantCities) {
+            amenityMarkersGroup.clearLayers();
+            const listContainer = document.getElementById('amenities-list');
+            listContainer.innerHTML = '';
+
+            let count = 0;
+
+            allAmenities.forEach(a => {
+                if (!relevantCities.includes(a.city)) return;
+                if (!activeAmenityFilters[a.type]) return;
+                count++;
+
+                let iconColor = a.type === 'petrol' ? '#10b981' : (a.type === 'cng' ? '#0d9488' : '#0284c7');
+                let symbol = a.type === 'petrol' ? '⛽' : (a.type === 'cng' ? '🟢' : '⚡');
+
+                const marker = L.circleMarker(a.coords, {
+                    radius: 5,
+                    fillColor: iconColor,
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(amenityMarkersGroup);
+
+                marker.bindPopup(`<strong>${symbol} ${a.name}</strong><br><span class="text-xs text-slate-500">${a.loc} (${a.city})</span>`);
+
+                const item = document.createElement('div');
+                item.className = 'p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-xs flex items-center justify-between';
+                item.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm">${symbol}</span>
+                        <div>
+                            <div class="font-bold text-slate-800 dark:text-slate-200 text-[11px] leading-tight">${a.name}</div>
+                            <div class="text-[10px] text-slate-500 dark:text-slate-400">${a.loc} • <span class="text-sky-600 font-semibold">${a.city}</span></div>
+                        </div>
+                    </div>
+                    <span class="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold ${
+                        a.type === 'petrol' ? 'bg-emerald-100 text-emerald-800' : (a.type === 'cng' ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800')
+                    }">${a.type}</span>
+                `;
+                listContainer.appendChild(item);
+            });
+
+            document.getElementById('amenities-count').innerText = `${count} points on route`;
+        }
+
+        function toggleAmenityFilter(type) {
+            activeAmenityFilters[type] = !activeAmenityFilters[type];
+            const chip = document.getElementById(`chip-${type}`);
+
+            if (activeAmenityFilters[type]) {
+                chip.classList.remove('opacity-40', 'line-through');
+            } else {
+                chip.classList.add('opacity-40', 'line-through');
+            }
+
+            calculateRoute();
+        }
+
+        // -------------------------------------------------------------
+        // TIMELINE RENDERING
+        // -------------------------------------------------------------
+        function renderTimelineSteps(nodeList, totalMinutes, mode) {
+            const container = document.getElementById('itinerary-timeline');
+            container.innerHTML = '';
+
+            const stepDuration = Math.round(totalMinutes / (nodeList.length - 1 || 1));
+
+            nodeList.forEach((node, i) => {
+                const isFirst = (i === 0);
+                const isLast = (i === nodeList.length - 1);
+                const isTransfer = node.includes('Layover') || node.includes('Switch');
+
+                const item = document.createElement('div');
+                item.className = 'relative pl-7 text-xs';
+
+                let dotColor = isFirst ? 'bg-emerald-500 border-white' : (isLast ? 'bg-rose-500 border-white' : (isTransfer ? 'bg-amber-500 border-white' : 'bg-sky-500 border-white'));
+
+                item.innerHTML = `
+                    <div class="absolute left-1.5 top-1 w-3 h-3 rounded-full -translate-x-1/2 border-2 ${dotColor}"></div>
+                    <div>
+                        <span class="font-bold text-slate-800 dark:text-slate-200 ${isTransfer ? 'text-amber-600 dark:text-amber-400' : ''}">${node}</span>
+                        ${isFirst ? '<span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold ml-1">(Origin)</span>' : ''}
+                        ${isLast ? '<span class="text-[10px] text-rose-600 dark:text-rose-400 font-semibold ml-1">(Destination)</span>' : ''}
+                        ${!isFirst && !isLast && !isTransfer ? `<span class="text-[10px] text-slate-400 ml-1">+${i * stepDuration}m elapsed</span>` : ''}
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // -------------------------------------------------------------
+        // UTILITIES & PREFERENCES
+        // -------------------------------------------------------------
+        function showToast(title, msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-body').innerText = msg;
+
+            toast.classList.remove('translate-y-32');
+            setTimeout(() => {
+                toast.classList.add('translate-y-32');
+            }, 4000);
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        function changeFontFamily(val) {
+            const body = document.getElementById('app-body');
+            body.classList.remove('font-sans', 'font-serif', 'font-mono');
+            body.classList.add(val);
+        }
+
+        function setFontSize(val) {
+            const body = document.getElementById('app-body');
+            body.classList.remove('text-xs', 'text-sm', 'text-base');
+            body.classList.add(val);
+        }
+
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('current-clock').innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }, 1000);
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>

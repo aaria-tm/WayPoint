@@ -1,64 +1,54 @@
-#WayPoint
-WayPoint is a front-end web application that simulates a multi-modal, inter-city transport network. Built entirely in a single file using HTML, Tailwind CSS, raw JavaScript, and Leaflet.js, it leverages core computer science concepts to solve real-world routing and urban mobility challenges.
+WayPoint
+WayPoint is a single-file front-end web application that simulates a dynamic, multi-modal transit network connecting five major Indian hubs: Mumbai, Pune, Delhi, Jaipur, and Bangalore. Built with HTML, Tailwind CSS, raw JavaScript, and Leaflet.js, it avoids backend dependencies by computing complex graph traversals and temporal routing logic entirely in the browser.
 
 Why This Project Was Made
-This project was developed to bridge the gap between theoretical computer science and practical software engineering. The primary goal was to apply Data Structures and Algorithms (DSA) -- specifically Graph Theory and Shortest Path algorithms -- to a real-world scenario: intelligent urban mobility.
-
-Instead of building a standard CRUD application, this project focuses on algorithmic logic, dynamic state management, and geospatial mapping. It serves as a robust demonstration of how complex data relationships (cities, highways, tolls, transit schedules, and roadside amenities) can be efficiently processed and visualized in the browser without relying on a heavy backend server.
+This project was built to transition Data Structures and Algorithms (DSA) from abstract concepts into a visual, interactive utility. Standard routing apps hide their logic behind black-box APIs; WayPoint exposes the underlying Graph Theory. It was designed to handle real-world edge cases that standard Dijkstra implementations ignore, such as temporal road closures, multi-leg transit layovers, and route-specific fuel filtering.
 
 How This Helps
-For Travelers and Commuters: It provides a unified dashboard to compare travel modes (Car, Bus, Train). By generating realistic schedules, calculating multi-leg train transfers, and detailing explicit highway layovers, users get a comprehensive view of their journey's time and financial cost.
+Algorithmic Route Comparison: Users don't just see a line on a map; they get dynamically computed travel times based on mode-specific speeds (e.g., Trains at 85 km/h vs. Buses at 55 km/h), alongside exact toll and fuel cost estimations calculated at 13-14 km/l.
 
-For EV and Alternative Fuel Drivers: The system dynamically filters and plots verified EV Superchargers, CNG stations, and Petrol pumps strictly along the user's computed route, eliminating range anxiety for inter-city travel.
+Realistic Transit Logic: It generates authentic travel itineraries. If a user travels from Bangalore to Delhi via train, the system calculates a multi-leg journey, factoring in Leg 1 (e.g., Udyan Express), a specific platform layover duration at a transfer hub (Mumbai Central), and Leg 2 (e.g., Rajdhani Express), complete with itemized fares.
 
-For Urban Infrastructure Planning: By simulating real-world disruptions (such as the scheduled maintenance closure of the Mumbai-Pune Expressway), the application demonstrates how a network automatically reroutes traffic to alternative corridors (like the Old NH-48), allowing planners to visualize the impact of infrastructure bottlenecks.
+Smart Corridor Infrastructure: Instead of plotting every gas station in the country, the application filters an array of 22 geo-coded infrastructure points (Tata Power EV chargers, MGL CNG, BPCL Petrol) checking if they belong strictly to the vertices of the active computed route.
 
 Core DSA Features Implemented
-1. Graph Data Structure (Adjacency List)
-Concept: The map is modeled as an undirected weighted graph where vertices are cities and edges are the connecting highways or rail lines.
+1. Adjacency List (Graph Representation)
+Implementation: The transport network is modeled as an undirected, weighted graph. The 5 cities act as Vertices (V), and the highway/rail corridors (e.g., NE-4 Expressway, Golden Quadrilateral) act as Edges (E).
 
-Implementation:
-
-Vertices: Cities (Mumbai, Pune, Delhi, Jaipur, Bangalore) act as nodes, storing geographic coordinates.
-
-Edges: The routes connecting the cities. Edges store multiple weights, including physical distance, toll costs, and transit mode constraints.
-
-Storage: Represented in JavaScript using an Adjacency List (Hash Map), which allows for highly efficient traversal compared to an adjacency matrix.
+Specificity: It is stored as a JavaScript Object (Hash Map) mapping each city to an array of its neighbors. This Adjacency List ensures efficient O(V + E) memory usage and traversal compared to a rigid Adjacency Matrix.
 
 2. Dijkstra's Shortest Path Algorithm
-Concept: A greedy algorithm that finds the shortest path between a starting node and all other nodes in a weighted graph.
+Implementation: When a user selects an Origin and Destination, a custom JavaScript implementation of Dijkstra's algorithm computes the most efficient path.
 
-Implementation: When a user selects an Origin and Destination, the system runs a custom implementation of Dijkstra's algorithm. It explores the graph, constantly updating the minimum known distance to each city. Once the destination is reached, the algorithm backtracks using a pointer map to reconstruct the exact optimal path.
+Specificity: It explores the graph by accumulating edge weights (physical distance in km). Once the target node is reached, it backtracks using a prev pointer map to construct the exact sequence of cities and highway waypoints to display on the Leaflet map.
 
-3. Priority Queue (Min-Heap Simulation)
-Concept: An abstract data type used to efficiently retrieve the element with the highest priority (in this case, the lowest travel distance).
+3. Priority Queue Simulation
+Implementation: To optimize Dijkstra's node exploration, the application utilizes a dynamically sorted array that mimics a Min-Heap Priority Queue.
 
-Implementation: During the execution of Dijkstra's algorithm, a dynamic array sorted at each insertion mimics a Priority Queue. This ensures the algorithm always explores the most promising (shortest) highway corridor next, minimizing unnecessary computations.
+Specificity: At each step, it sorts the unvisited nodes by their current shortest accumulated distance. This ensures the algorithm always explores the mathematically most promising corridor next, guaranteeing optimal path discovery.
 
-4. Dynamic Edge Masking (Temporal Graphs)
-Concept: Modifying graph topology at runtime based on external temporal conditions.
+4. Temporal Graph Routing (Dynamic Edge Masking)
+Implementation: Graph topology adapts at runtime based on external temporal state (the user's <input type="date">).
 
-Implementation: The algorithm evaluates the user's selected travel date. If the date falls on or before a specific cutoff (October 10), the primary Expressway edge is programmatically severed (masked) with an infinite weight. The algorithm automatically falls back to calculating the next best path (the Old Highway corridor), simulating real-time road closure rerouting.
+Specificity: The Mumbai-Pune Expressway is programmed with a hardcoded maintenance closure until October 10, 2026. If the user selects a date on or before October 10, the algorithm programmatically severs the primary 148km edge by assigning it an infinite weight. Dijkstra automatically recalculates and forces the route through the 155km Old NH-48 alternate path (via Khandala Ghat), updating the timeline and travel duration accordingly.
 
-5. Hash Maps for Constant Time Lookups
-Concept: Using key-value pairs for O(1) time complexity data retrieval.
+5. Constant-Time O(1) Hash Map Lookups
+Implementation: Retrieval of complex, multi-variable transit schedules is optimized using composite dictionary keys.
 
-Implementation: Multi-leg train transfers, bus operator details, and city coordinates are stored in nested dictionaries. When generating transit schedules, the system generates a composite key (e.g., "Bangalore-Jaipur") to instantly fetch leg-by-leg train data, layover durations, and station names without needing to iterate through heavy arrays.
+Specificity: Instead of using O(N) loops to search through arrays of train schedules, the system generates a composite string key (e.g., "Bangalore-Jaipur") from the calculated graph endpoints. This allows instantaneous O(1) retrieval of authentic carrier names, multi-leg transfer logic, and base pricing.
 
 Technical Stack
-Frontend: HTML5, standard DOM JavaScript
+Frontend Environment: HTML5, standard DOM JavaScript (Zero build tools required)
 
-Styling: Tailwind CSS (via CDN) with native Dark Mode support
+Styling Framework: Tailwind CSS (via CDN)
 
-Geospatial Mapping: Leaflet.js
+Geospatial Rendering: Leaflet.js
 
-Map Tiles: Mapbox API
-
-Icons: FontAwesome 6
+Map Tile Provider: Mapbox API (Public Token integration)
 
 How to Run
 Clone the repository or download the index.html file.
 
-Ensure you have an active internet connection (required to fetch the Tailwind, Leaflet, and Mapbox assets).
+Ensure you have an active internet connection to load the external CDNs (Tailwind, Leaflet, Mapbox).
 
-Open the index.html file directly in any modern web browser.
+Open the index.html file directly in any modern web browser. The application runs entirely client-side.
